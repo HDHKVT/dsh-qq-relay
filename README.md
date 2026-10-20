@@ -73,8 +73,6 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 ### C. 不需要下载
 
 - **FFmpeg**：不需要（ASR 由 PyAV 解码，抽帧由 OpenCV，B 站下的是单文件 mp4）。
-- **显卡 / CUDA**：不需要，ASR 走 CPU int8。
-- **任何 npm 包**、任何外部中转服务、任何浏览器扩展。
 
 ### D. 功能降级表（缺什么会怎样）
 
