@@ -233,7 +233,7 @@ git clone https://github.com/HDHKVT/dsh-qq-relay.git D:\dsh-plugins\dsh-qq-relay
 | `sticker.trigger` | `存表情包` | 收录暗号 |
 | `video.mode` / `.model` / `.modelDir` / `.maxGrid` | `accurate` / `auto` / 空 / 8 | 视频功能 |
 | `video.biliCookie` | 空 | 可选 SESSDATA（不下发浏览器、不写日志） |
-| `video.biliDir` / `retentionDays` | 空 / 7 | B 站下载目录（空= `<数据目录>ili`）/ 保留天数（0=不清理） |
+| `video.biliDir` / `retentionDays` | 空 / 7 | B 站下载目录（空= `<数据目录>/bili`）/ 保留天数（0=不清理） |
 | `ui.showCard` | `true` | 会话右上角那张 QQ 中继卡片是否显示 |
 
 完整默认值与校验见 `lib/config.js`。
