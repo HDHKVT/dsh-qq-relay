@@ -1,0 +1,27 @@
+node_modules/
+
+# Python 虚拟环境与缓存（视频功能）
+video/.venv/
+video/__pycache__/
+__pycache__/
+*.pyc
+
+# 本地数据与密钥（绝不上传）
+relay.json
+relay.json.*
+*.log
+probe.log
+files/
+images/
+video-cache/
+hf-cache/
+faces.json
+
+# 编辑备份与快照
+*.bak
+*.bak-*
+*.snapshot-*
+
+# 系统杂项
+.DS_Store
+Thumbs.db

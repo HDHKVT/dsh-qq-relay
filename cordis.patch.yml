@@ -1,0 +1,9 @@
+# dsh bundle layer: mount the dsh-qq-relay plugin.
+#
+# 第 0 步（只读探针）：它只回答一个问题 —— 插件能不能在宿主进程里
+# 拿到 sessionController 这个服务。不投递消息、不注册工具、不改任何行为。
+#
+# 结果写在 D:\dsh-plugins\_media\dsh-qq-relay\（probe-*.json + probe.log）
+- insert:
+    - id: qq-relay
+      name: dsh-qq-relay

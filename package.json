@@ -1,0 +1,55 @@
+{
+  "name": "dsh-qq-relay",
+  "version": "1.0.0",
+  "description": "把 DeepSeek Harness 接到 QQ：插件自己连 QQ，支持文字/图片/文件/表情包/视频理解/B站下载",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./icon": "./assets/icon.png"
+  },
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "assets/icon.png"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "qq",
+    "qqbot",
+    "plugin"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HDHKVT/dsh-qq-relay.git"
+  },
+  "icon": "./assets/icon.png",
+  "homepage": "https://github.com/HDHKVT/dsh-qq-relay#readme",
+  "bugs": {
+    "url": "https://github.com/HDHKVT/dsh-qq-relay/issues"
+  }
+}
