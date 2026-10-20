@@ -12,112 +12,6 @@
 插件图标：assets/icon.png（320×320，Q 版头像）。
 鲸鱼娘形象基于上善无形（B站）原创角色二创，依 CC BY-NC-SA 4.0 非商业使用，二创同协议授权。
 
-## 给接手的 AI / 修改指南
-
-> 这份 README 前半部分就是给"要改这个插件"的 AI 看的。先读这一节，再动手。
-
-### 1. 代码地图：要改什么去哪里
-
-| 你想改 | 改哪里 |
-|---|---|
-| QQ 连接、token、网关、心跳 | `lib/qq-direct.js` |
-| 谁能使唤它、消息怎么写进会话 | `lib/delivery.js`（主人门禁、去重、B 站链接提示） |
-| 回答怎么切分、怎么发回 QQ | `lib/qq-reply.js` |
-| 图片/GIF/图库 | `lib/vision.js`、`lib/gif.js` |
-| 文件收发 | `lib/files.js` |
-| 表情包仓库 | `lib/stickers.js` |
-| 视频理解（调用 Python） | `lib/video.js` + `video/video_processor.py` |
-| B 站解析与下载 | `lib/bilibili.js` |
-| 配置默认值与校验 | `lib/config.js`（**改配置先改这里**） |
-| 设置页 UI | `lib/client.js`（品牌插件，无 JSX，用 `React.createElement`） |
-| 工具注册、RPC、信箱、启动流程 | `index.js` |
-
-### 2. 加一个"工具"（让模型能调的新能力）
-
-1. 在 `index.js` 的 `registerTools` 里 `defs.push({ name, description, parameters, output: TOOL_OUTPUT, execute })`；
-2. `parameters` 用 JSON Schema，`additionalProperties: false`；
-3. `execute` 返回 `{ content: [{ type: 'text', text }] }`；失败也要返回文字原因，**不要抛裸错**；
-4. 在 `test/host-behaviour.test.mjs` 的期望工具名数组里加上它，否则测试挂；
-5. 要让它出现在"设置页"或"卡片"里，再去 `lib/client.js` 加 UI，并在 `REMOTE_METHOD_NAMES` 注册对应 RPC。
-
-### 3. 加一个"设置项"
-
-1. `lib/config.js`：加进 `DEFAULTS`、`TOP_KEYS`（或子对象的 `*_KEYS`）、`readConfig` 的合并、`writeConfig` 的校验；
-2. `publicConfig` 里决定要不要暴露给浏览器（**密钥类只回布尔**，例如 `hasSecret`）；
-3. `lib/client.js`：draft 里加字段、`adopt` 里读、保存时按"和快照不同才写"生成 patch、UI 里加控件；
-4. 文档：本 README 的配置表 + `技能\技能-专题-dsh-qq-relay.md`。
-
-### 4. 信箱：留着的一个"对外接口"
-
-插件里有两条腿：`transport: "direct"`（现在默认，插件自己连 QQ）和 `transport: "mailbox"`（旧的引擎信箱腿，**保留但冻结**）。
-
-信箱本身可以当成**进程无关的接入协议**——任何程序（微信/飞书/钉钉的适配器、脚本、别的 AI）只要能读写文件，就能和 DSH 对话：
-
-```
-<mailbox>/
-├─ inbox/    投递方写：一封一个 json
-├─ outbox/   插件写回执（一封一个 json）
-├─ done/     已处理的信（插件归档）
-└─ failed/   处理失败的信（插件归档，附带原因）
-```
-
-**投递格式**（写进 `inbox/`，文件名建议 `<yyyymmdd>-<hhmmss>-<随机6位>.json`）：
-
-```json
-{
-  "protocol": 1,
-  "id": "20261021-120000-abc123",
-  "at": 1761000000000,
-  "text": "要问的话"
-}
-```
-
-**回执格式**（插件写进 `outbox/`，适配器取走再转成自己平台的消息）：
-
-```json
-{
-  "protocol": 1,
-  "id": "receipt-20261021-120000-abc123",
-  "at": 1761000005000,
-  "kind": "text",
-  "text": "答完的内容",
-  "replyTo": "20261021-120000-abc123"
-}
-```
-
-**接之前必须知道的三个限制**（别踩）：
-
-1. **信箱腿只在 `transport: "mailbox"` 时运行**；现在是 `direct`，所以外部队列**不会**被消费。要接外部入口，得先把 `transport` 改回 `mailbox`，或按"入口模型"改造（见 `记忆\记忆-专题-dsh-qq-relay.md` 的待办）；
-2. 回执只是文件，**不负责发到平台**——把微信消息发出去是适配器的事；
-3. 协议目前没有鉴权、没有幂等键（只靠 `id` 去重）——跨机器用之前要先补这两样。
-
-### 5. 视频管线（Python 侧）
-
-- 只有一个入口：`video_processor.py --input <媒体> --output <json> --mode fast|accurate --model auto --model-dir <目录> --max-grid <n>`；
-- 结果 JSON 的字段是**契约**：`status / duration_seconds / subtitles[{time,text}] / images[] / media / mode / model`；
-- 改 Python 时别破坏这个结构，否则 `lib/video.js` 的 `validateResult` 会拒收；
-- 依赖版本是钉死的（`av==13.1.0`、`huggingface_hub<1`），别随手升级，原因见 `video/requirements.txt` 的注释。
-
-### 6. 改完怎么验
-
-```bash
-node test/<对应文件>.test.mjs        # 单点
-for %f in (test\*.test.mjs) do node %f   # 全量（cmd）
-```
-
-- 纯逻辑改动：加/改单测，保持全绿；
-- 界面改动：`test/client-contract.test.mjs` 会渲染组件，改 UI 后要跑；
-- 宿主行为改动：`test/host-behaviour.test.mjs` 用一个假的 DSH 装载插件，验证工具名、RPC、信箱、回执；
-- 真机改动（QQ/视频）：必须实际发一条，别只看单测。
-
-### 7. 约定与坑
-
-- QQ 回复**纯文本、900 字以内、不带 Markdown**；
-- 调 `session/prompt` **必须**带 `AbortSignal`（漏了会静默不回）；
-- Windows 路径带中文时，OpenCV/ffmpeg 常打不开——`lib/video.js` 有硬链接兜底；
-- 日志里**不要打印带签名的下载 URL**，只打主机名；
-- 配置写盘是"原子写 + 留 `.bak`"，别绕过 `writeConfig` 直接改 `relay.json`。
-
 ## 功能
 
 | 能力 | 说明 | 额外依赖 |
@@ -270,6 +164,112 @@ for %f in (test\*.test.mjs) do node %f
 - B 站 1080P 需要登录且可能切 DASH（音视频分离），目前只做 720P 单文件与纯音频；
 - 没有 GPU 加速，ASR 走 CPU int8；
 - 旧的「引擎信箱」链路保留但冻结，仅为兼容旧配置。
+
+## 给装这个插件的 AI / 修改指南
+
+> 这一节是给"要装这个插件、或者要改它"的 AI 看的。装的部分看前面「依赖与下载清单」，改的部分看这里。
+
+### 1. 代码地图：要改什么去哪里
+
+| 你想改 | 改哪里 |
+|---|---|
+| QQ 连接、token、网关、心跳 | `lib/qq-direct.js` |
+| 谁能使唤它、消息怎么写进会话 | `lib/delivery.js`（主人门禁、去重、B 站链接提示） |
+| 回答怎么切分、怎么发回 QQ | `lib/qq-reply.js` |
+| 图片/GIF/图库 | `lib/vision.js`、`lib/gif.js` |
+| 文件收发 | `lib/files.js` |
+| 表情包仓库 | `lib/stickers.js` |
+| 视频理解（调用 Python） | `lib/video.js` + `video/video_processor.py` |
+| B 站解析与下载 | `lib/bilibili.js` |
+| 配置默认值与校验 | `lib/config.js`（**改配置先改这里**） |
+| 设置页 UI | `lib/client.js`（品牌插件，无 JSX，用 `React.createElement`） |
+| 工具注册、RPC、信箱、启动流程 | `index.js` |
+
+### 2. 加一个"工具"（让模型能调的新能力）
+
+1. 在 `index.js` 的 `registerTools` 里 `defs.push({ name, description, parameters, output: TOOL_OUTPUT, execute })`；
+2. `parameters` 用 JSON Schema，`additionalProperties: false`；
+3. `execute` 返回 `{ content: [{ type: 'text', text }] }`；失败也要返回文字原因，**不要抛裸错**；
+4. 在 `test/host-behaviour.test.mjs` 的期望工具名数组里加上它，否则测试挂；
+5. 要让它出现在"设置页"或"卡片"里，再去 `lib/client.js` 加 UI，并在 `REMOTE_METHOD_NAMES` 注册对应 RPC。
+
+### 3. 加一个"设置项"
+
+1. `lib/config.js`：加进 `DEFAULTS`、`TOP_KEYS`（或子对象的 `*_KEYS`）、`readConfig` 的合并、`writeConfig` 的校验；
+2. `publicConfig` 里决定要不要暴露给浏览器（**密钥类只回布尔**，例如 `hasSecret`）；
+3. `lib/client.js`：draft 里加字段、`adopt` 里读、保存时按"和快照不同才写"生成 patch、UI 里加控件；
+4. 文档：本 README 的配置表 + `技能\技能-专题-dsh-qq-relay.md`。
+
+### 4. 信箱：留着的一个"对外接口"
+
+插件里有两条腿：`transport: "direct"`（现在默认，插件自己连 QQ）和 `transport: "mailbox"`（旧的引擎信箱腿，**保留但冻结**）。
+
+信箱本身可以当成**进程无关的接入协议**——任何程序（微信/飞书/钉钉的适配器、脚本、别的 AI）只要能读写文件，就能和 DSH 对话：
+
+```
+<mailbox>/
+├─ inbox/    投递方写：一封一个 json
+├─ outbox/   插件写回执（一封一个 json）
+├─ done/     已处理的信（插件归档）
+└─ failed/   处理失败的信（插件归档，附带原因）
+```
+
+**投递格式**（写进 `inbox/`，文件名建议 `<yyyymmdd>-<hhmmss>-<随机6位>.json`）：
+
+```json
+{
+  "protocol": 1,
+  "id": "20261021-120000-abc123",
+  "at": 1761000000000,
+  "text": "要问的话"
+}
+```
+
+**回执格式**（插件写进 `outbox/`，适配器取走再转成自己平台的消息）：
+
+```json
+{
+  "protocol": 1,
+  "id": "receipt-20261021-120000-abc123",
+  "at": 1761000005000,
+  "kind": "text",
+  "text": "答完的内容",
+  "replyTo": "20261021-120000-abc123"
+}
+```
+
+**接之前必须知道的三个限制**（别踩）：
+
+1. **信箱腿只在 `transport: "mailbox"` 时运行**；现在是 `direct`，所以外部队列**不会**被消费。要接外部入口，得先把 `transport` 改回 `mailbox`，或按"入口模型"改造（见 `记忆\记忆-专题-dsh-qq-relay.md` 的待办）；
+2. 回执只是文件，**不负责发到平台**——把微信消息发出去是适配器的事；
+3. 协议目前没有鉴权、没有幂等键（只靠 `id` 去重）——跨机器用之前要先补这两样。
+
+### 5. 视频管线（Python 侧）
+
+- 只有一个入口：`video_processor.py --input <媒体> --output <json> --mode fast|accurate --model auto --model-dir <目录> --max-grid <n>`；
+- 结果 JSON 的字段是**契约**：`status / duration_seconds / subtitles[{time,text}] / images[] / media / mode / model`；
+- 改 Python 时别破坏这个结构，否则 `lib/video.js` 的 `validateResult` 会拒收；
+- 依赖版本是钉死的（`av==13.1.0`、`huggingface_hub<1`），别随手升级，原因见 `video/requirements.txt` 的注释。
+
+### 6. 改完怎么验
+
+```bash
+node test/<对应文件>.test.mjs        # 单点
+for %f in (test\*.test.mjs) do node %f   # 全量（cmd）
+```
+
+- 纯逻辑改动：加/改单测，保持全绿；
+- 界面改动：`test/client-contract.test.mjs` 会渲染组件，改 UI 后要跑；
+- 宿主行为改动：`test/host-behaviour.test.mjs` 用一个假的 DSH 装载插件，验证工具名、RPC、信箱、回执；
+- 真机改动（QQ/视频）：必须实际发一条，别只看单测。
+
+### 7. 约定与坑
+
+- QQ 回复**纯文本、900 字以内、不带 Markdown**；
+- 调 `session/prompt` **必须**带 `AbortSignal`（漏了会静默不回）；
+- Windows 路径带中文时，OpenCV/ffmpeg 常打不开——`lib/video.js` 有硬链接兜底；
+- 日志里**不要打印带签名的下载 URL**，只打主机名；
+- 配置写盘是"原子写 + 留 `.bak`"，别绕过 `writeConfig` 直接改 `relay.json`。
 
 ## 许可
 
