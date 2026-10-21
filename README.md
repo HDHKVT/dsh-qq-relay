@@ -137,12 +137,6 @@ DSH 默认看动态图只看一帧。为了让它能看懂动态图，就需要�
 
 ---
 
-#### 下载B站视频
-
-可以发一个B站链接给你的大肥鱼，DSH 会下载视频到指定的地方。
-
----
-
 #### 视频理解
 
 如果你希望在 QQ 上发个视频链接，让你的大肥鱼能看懂视频，就需要额外下载一点东西。
@@ -228,7 +222,6 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 | 文件收发 | `lib/files.js` |
 | 表情包仓库 | `lib/stickers.js` |
 | 视频理解（调用 Python） | `lib/video.js` + `video/video_processor.py` |
-| B 站解析与下载 | `lib/bilibili.js` |
 | 配置默认值与校验 | `lib/config.js`（**改配置先改这里**） |
 | 设置页 UI | `lib/client.js`（品牌插件，无 JSX，用 `React.createElement`） |
 | 工具注册、RPC、信箱、启动流程 | `index.js` |
