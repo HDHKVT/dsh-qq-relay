@@ -34,7 +34,6 @@
      - 图片库（incoming 临时库 / stickers 表情包库）
      - 表情包（暗号收录的三种方式、自动命名、发送频率）
      - 文件（双向收发、大小上限）
-     - 下载 B 站视频
      - 视频理解（Python 3.12 + venv + Whisper 模型）
      - 设置页 - 视频模式（fast / accurate、抽帧、分页）
      - 功能降级表（缺什么会怎样）
@@ -186,7 +185,6 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
                     ├─ lib/delivery.js    主人门禁 → 去重 → 投进会话
                     ├─ lib/qq-reply.js    按 turn 关联回答，切好再发回
                     ├─ lib/vision.js · gif.js · files.js · stickers.js
-                    ├─ lib/bilibili.js    wbi 签名 / 解析 / 下载
                     └─ video/video_processor.py   ASR + 抽帧 + 拼图（可选）
 ```
 
