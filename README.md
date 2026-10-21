@@ -39,8 +39,8 @@
      - 设置页 - 视频模式（fast / accurate、抽帧、分页）
      - 功能降级表（缺什么会怎样）
 2. **架构**
-   - 2.1 宿主各模块职责（qq-direct / delivery / qq-reply / ...）
-   - 2.2 浏览器侧 `lib/client.js` 的「QQ 中继」设置页
+   - 宿主各模块职责（qq-direct / delivery / qq-reply / ...）
+   - 浏览器侧 `lib/client.js` 的「QQ 中继」设置页
 3. **隐私与安全**
    - 数据只在本机；日志只打 CDN 主机名；biliCookie 不回浏览器
 4. **已知限制**
