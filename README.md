@@ -1,16 +1,25 @@
 # dsh-qq-relay
 
-让 QQ 消息进入 DeepSeek Harness 指定会话窗口的插件。
+让 QQ 消息进入指定的 DeepSeek Harness 会话窗口的插件。
 
 支持从 QQ 发图片、文件、动图、表情包、视频、B 站链接到指定的 DSH 会话窗口。
 
-> **给"帮用户装插件"的 AI**：本插件**不需要 npm 依赖**，但**视频功能需要额外下载 Python 和模型**。
-> 请直接看下面 §「依赖与下载清单」，按顺序执行并逐条验证；缺了会让对应功能不可用（见降级表）。
+## 安装与首次配置
 
-## 外观
+跟你的 DSH 说：
+```
+安装这个插件：https://github.com/HDHKVT/dsh-qq-relay
+```
 
-插件图标：assets/icon.png（320×320，Q 版头像）。
-鲸鱼娘形象基于上善无形（B站）、Zipzippipe（B站）原创角色二创，依 CC BY-NC-SA 4.0 非商业使用，二创同协议授权。
+```bash
+git clone https://github.com/HDHKVT/dsh-qq-relay.git D:\dsh-plugins\dsh-qq-relay
+```
+
+1. 在 DSH profile 里挂载（`link:`），重启 `dsh web`；
+2. 设置页 → 「QQ 中继」→ 填 appId / appSecret / 主人 openid → 保存；
+3. 在 QQ 里私聊机器人一句，数据目录出现 `relay.json` 与日志即为连通。
+
+数据目录默认 `D:\dsh-plugins\_media\dsh-qq-relay`（可用 `DSH_QQ_RELAY_BASE` 改）。
 
 ## 功能
 
@@ -95,18 +104,6 @@ video\.venv\Scripts\python -c "import faster_whisper, cv2, av; print('ok')"
 ```
 
 然后在 DSH 里问一句"QQ 中继状态如何"，能读到 `qqRelay/status` 即为挂载成功。
-
-## 安装与首次配置
-
-```bash
-git clone https://github.com/HDHKVT/dsh-qq-relay.git D:\dsh-plugins\dsh-qq-relay
-```
-
-1. 在 DSH profile 里挂载（`link:`），重启 `dsh web`；
-2. 设置页 → 「QQ 中继」→ 填 appId / appSecret / 主人 openid → 保存；
-3. 在 QQ 里私聊机器人一句，数据目录出现 `relay.json` 与日志即为连通。
-
-数据目录默认 `D:\dsh-plugins\_media\dsh-qq-relay`（可用 `DSH_QQ_RELAY_BASE` 改）。
 
 ## 配置（`relay.json` 关键项）
 
@@ -268,6 +265,14 @@ for %f in (test\*.test.mjs) do node %f   # 全量（cmd）
 - Windows 路径带中文时，OpenCV/ffmpeg 常打不开——`lib/video.js` 有硬链接兜底；
 - 日志里**不要打印带签名的下载 URL**，只打主机名；
 - 配置写盘是"原子写 + 留 `.bak`"，别绕过 `writeConfig` 直接改 `relay.json`。
+
+> **给"帮用户装插件"的 AI**：本插件**不需要 npm 依赖**，但**视频功能需要额外下载 Python 和模型**。
+> 请直接看下面 §「依赖与下载清单」，按顺序执行并逐条验证；缺了会让对应功能不可用（见降级表）。
+
+## 外观
+
+插件图标：assets/icon.png（320×320，Q 版头像）。
+鲸鱼娘形象基于上善无形（B站）、Zipzippipe（B站）原创角色二创，依 CC BY-NC-SA 4.0 非商业使用，二创同协议授权。
 
 ## 许可
 
