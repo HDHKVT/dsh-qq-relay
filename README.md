@@ -16,10 +16,8 @@
 1. 搜索引擎搜 QQ 开放平台 → 注册一个官方的 QQ 机器人 → 进后台获取 AppId / AppSecret。
 2. 回到 DSH 设置页 → 「QQ 中继」→ 填 AppId / AppSecret → 保存；
 3. 找一个会话，点锁定按钮：
-
-![锁定会话说明](./assets/smtp.png)
-
-3. 在 QQ 里私聊机器人一句
+   ![锁定会话说明](./assets/smtp.png)
+4. 在 QQ 里私聊机器人一句
 
 ## 功能
 
