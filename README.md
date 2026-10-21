@@ -4,22 +4,20 @@
 
 支持从 QQ 发图片、文件、动图、表情包、视频、B 站链接到指定的 DSH 会话窗口。
 
-## 安装与首次配置
+## 安装
 
 跟你的 DSH 说：
 ```
 安装这个插件：https://github.com/HDHKVT/dsh-qq-relay
 ```
 
-```bash
-git clone https://github.com/HDHKVT/dsh-qq-relay.git D:\dsh-plugins\dsh-qq-relay
-```
+## 首次配置
 
-1. 在 DSH profile 里挂载（`link:`），重启 `dsh web`；
-2. 设置页 → 「QQ 中继」→ 填 appId / appSecret / 主人 openid → 保存；
-3. 在 QQ 里私聊机器人一句，数据目录出现 `relay.json` 与日志即为连通。
-
-数据目录默认 `D:\dsh-plugins\_media\dsh-qq-relay`（可用 `DSH_QQ_RELAY_BASE` 改）。
+1. 搜索引擎搜 QQ 开放平台 → 注册一个官方的 QQ 机器人 → 进后台获取 AppId / AppSecret。
+2. 回到 DSH 设置页 → 「QQ 中继」→ 填 AppId / AppSecret → 保存；
+3. 找一个会话，点锁定按钮：
+![锁定会话说明](./assets/smtp.png)
+3. 在 QQ 里私聊机器人一句
 
 ## 功能
 
