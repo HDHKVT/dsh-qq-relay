@@ -19,7 +19,7 @@
 
    ![锁定会话说明](./assets/smtp.png)
 
-4. 在 QQ 里给机器人发个消息。
+4. 在 QQ 里给机器人发个消息。（以下默认机器人 = 大肥鱼）
 
 ## 功能
 
@@ -75,7 +75,7 @@ DSH 默认看动态图只看一帧。为了让它能看懂动态图，就需要�
 ---
 
 #### 表情包
-在 QQ 上，给机器人发一张图，然后说一句暗号，DSH 就会把这张图存进表情包库，留待以后 DSH 自己发表情包。
+在 QQ 上，给你的大肥鱼发一张图，然后说一句暗号，DSH 就会把这张图存进表情包库，留待以后 DSH 自己发表情包。
 
 暗号可以自定义，在设置页。
 
@@ -87,7 +87,7 @@ DSH 默认看动态图只看一帧。为了让它能看懂动态图，就需要�
 
 3.先发图，下一条消息只说暗号也能收。（120 秒内）
 
-收了表情包，DSH 就可以主动发送表情包。频率可调，在设置页。
+收了表情包，DSH 会自动给表情包命名，也可以主动发送表情包。主动发送频率可调，在设置页。
 
 ---
 
@@ -98,13 +98,31 @@ DSH 默认看动态图只看一帧。为了让它能看懂动态图，就需要�
 
 最多能发送多大的文件，可以设置。
 
-| 能力 | 说明 | 额外依赖 |
-|---|---|---|
-| 表情 | `<faceType=…>` →「（表情：名字）」，名字表可导入 | 无 |
-| 表情包仓库 | 引用图/直发图 + 暗号触发收录；模型负责起名；可主动发 | 无 |
-| 回执 | 收到图片/文件先回一句，1.2 秒节流 | 无 |
-| 视频理解 | 本地转字幕 + 抽帧拼图，模型逐张看图给**带时间线**的总结 | **Python 3.12 + venv + 模型** |
-| B 站下载 | BV / av / b23 短链 / 分享文案；720P 单文件 mp4；可只下音频 | 无（纯 Node） |
+---
+
+#### 下载B站视频
+
+可以发一个B站链接给你的大肥鱼，DSH 会下载视频到指定的地方。
+
+#### 视频理解
+
+如果你希望在 QQ 上发个视频链接，让你的大肥鱼能看懂视频，就需要额外下载一点东西。
+
+发送以下内容给你的大肥鱼：
+
+Python 3.12
+
+venv 和相关依赖
+```powershell
+   py -3.12 -m venv video\.venv
+   video\.venv\Scripts\python -m pip install -r video\requirements.txt
+   ```
+
+**Whisper 模型**：
+   - 默认 `base`（约 **145MB**）：**首次跑视频时自动下载**，缓存在 `<数据目录>\hf-cache`；
+   - 想更准可换 `large-v3-turbo`（约 **1.6GB**）：手动下载到任意目录，在设置页「视频 → 模型目录」指过去。
+     文件：`config.json`、`model.bin`、`tokenizer.json`、`vocabulary.json`、`preprocessor_config.json`。
+   - 国内网络已默认走 `HF_ENDPOINT=https://hf-mirror.com` 且关掉 xet（插件注入，不用手配）。
 
 ## 架构
 
@@ -118,42 +136,18 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
                     └─ video/video_processor.py   ASR + 抽帧 + 拼图（可选）
 ```
 
-浏览器侧 `lib/client.js` 提供「皮肤管理 → QQ 中继」设置页。
-
-## 依赖与下载清单（给安装代理）
-
-### A. 必装（不做，插件跑不起来）
-
-1. **DSH 0.2.x**（宿主）。检查：`dsh --version`。
-2. **Node.js ≥ 20**。检查：`node --version`。
-3. **一个 QQ 机器人**：appId、appSecret、主人 openid（QQ 开放平台后台拿）。
-4. **挂载插件**：把本仓库放到 `D:\dsh-plugins\dsh-qq-relay`（或任意目录），
-   在 profile（如 `~/.dsh/profiles/web/cordis.patch.yml`）加一条 `link:` 指向它，重启 `dsh web`。
-
-> 本插件**没有 npm 依赖**，不需要 `npm install`。
+浏览器侧 `lib/client.js` 提供「QQ 中继」设置页。
 
 ### B. 可选：视频理解（不做，视频/B 站下载之外的"看视频"不可用）
 
-5. **Python 3.12**（**不要 3.13/3.14**，ctranslate2 / opencv 轮子未必有）。检查：`py -3.12 --version`。
-6. 建 venv 并装依赖（约 **500MB**）：
-   ```powershell
-   py -3.12 -m venv video\.venv
-   video\.venv\Scripts\python -m pip install -r video\requirements.txt
-   ```
+6. 建 （约 **500MB**）：
+   
    验证：
    ```powershell
    video\.venv\Scripts\python -c "import faster_whisper, cv2, av, numpy, PIL; print('ok')"
    ```
    > `av` 与 `huggingface_hub` 已在 requirements 里钉版本，**不要手动升级**。
-7. **Whisper 模型**：
-   - 默认 `base`（约 **145MB**）：**首次跑视频时自动下载**，缓存在 `<数据目录>\hf-cache`；
-   - 想更准可换 `large-v3-turbo`（约 **1.6GB**）：手动下载到任意目录，在设置页「视频 → 模型目录」指过去。
-     文件：`config.json`、`model.bin`、`tokenizer.json`、`vocabulary.json`、`preprocessor_config.json`。
-   - 国内网络已默认走 `HF_ENDPOINT=https://hf-mirror.com` 且关掉 xet（插件注入，不用手配）。
-
-### C. 不需要下载
-
-- **FFmpeg**：不需要（ASR 由 PyAV 解码，抽帧由 OpenCV，B 站下的是单文件 mp4）。
+7. 
 
 ### D. 功能降级表（缺什么会怎样）
 
