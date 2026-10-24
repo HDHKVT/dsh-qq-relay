@@ -13,9 +13,15 @@
   },
   "files": [
     "index.js",
-    "lib/client.js",
+    "lib/",
+    "video/remote_frame.py",
+    "video/qr_render.py",
+    "video/storyboard_crop.py",
+    "video/video_processor.py",
+    "video/requirements.txt",
     "cordis.patch.yml",
     "README.md",
+    "LICENSE",
     "assets/icon.png"
   ],
   "keywords": [
@@ -40,7 +46,7 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.19 || >=24"
   },
   "repository": {
     "type": "git",
@@ -50,5 +56,12 @@
   "homepage": "https://github.com/HDHKVT/dsh-qq-relay#readme",
   "bugs": {
     "url": "https://github.com/HDHKVT/dsh-qq-relay/issues"
-  }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh": "^0.2.0-rc.2"
+  },
+  "os": [
+    "win32"
+  ]
 }
