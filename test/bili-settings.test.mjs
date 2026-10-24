@@ -43,8 +43,8 @@ function report(name, passed, detail) {
 }
 {
   const result = describeCredentialCard({ ok: true, usable: true, expired: false, daysLeft: 180, missing: [], reason: '' })
-  report('4 daysLeft 180 → tone:ok、文案含「180.0」',
-    result.tone === 'ok' && result.text.includes('180.0') && result.daysLeft === 180,
+  report('4 daysLeft 180 → tone:ok、文案含「180」（整数）',
+    result.tone === 'ok' && result.text.includes('180') && result.daysLeft === 180,
     JSON.stringify(result))
 }
 {
@@ -166,6 +166,18 @@ function report(name, passed, detail) {
     result.ok === true && result.errors.length === 2 && result.errors.every((entry) => entry.error.length > 0) &&
       JSON.stringify(result.patch) === '{}' && fieldCount === 3,
     JSON.stringify(result))
+}
+
+// ── 19(加)字段表的三句 desc ──
+{
+  const descs = BILI_FIELDS.map((field) => field.desc)
+  report('19(加)BILI_FIELDS 三句 desc 逐字到位',
+    JSON.stringify(descs) === JSON.stringify([
+      '看 B 站视频时给你几张画面。多几张能看清结构，但每张都占上下文，一般 6 张够。',
+      'B 站没给字幕时，短于这个时长才自动本地转写，免得让你干等；更长的会先问你一句。',
+      '抽帧和下载的清晰度。1080P 不一定每条视频都有。',
+    ]),
+    JSON.stringify(descs))
 }
 
 console.log(`\n共 ${totalCount} 项,失败 ${failedCount} 项`)

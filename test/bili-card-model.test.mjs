@@ -5,7 +5,7 @@
  * 全部通过退出码 0,有失败退出码 1;每条用例一行输出。
  */
 import { buildBiliCardModel } from '../lib/bili-card-model.js'
-import { describeCredentialCard } from '../lib/bili-settings.js'
+import { describeCredentialCard, BILI_FIELDS } from '../lib/bili-settings.js'
 
 let totalCount = 0
 let failedCount = 0
@@ -34,8 +34,8 @@ function report(name, passed, detail) {
   const result = buildBiliCardModel({
     validation: { ok: true, usable: true, expired: false, daysLeft: 180, missing: [], reason: '' },
   })
-  report('2 可用、180 天 → tone:ok、文案含 180.0、hasCredential:true、clear 可点、scan.label 重新扫码',
-    result.status.tone === 'ok' && result.status.text.includes('180.0') &&
+  report('2 可用、180 天 → tone:ok、文案含 180（整数）、hasCredential:true、clear 可点、scan.label 重新扫码',
+    result.status.tone === 'ok' && result.status.text.includes('180') &&
       result.hasCredential === true && result.buttons.clear.enabled === true &&
       result.buttons.scan.label === '重新扫码',
     JSON.stringify(result))
@@ -164,6 +164,21 @@ function report(name, passed, detail) {
       peek.options === null && peek.unit === '帧' &&
       shapeOk && result.buttons.refresh.enabled === true,
     JSON.stringify(result.fields))
+}
+
+// ── 13(加)desc 透传与两份字段表防漂移 ──
+{
+  const result = buildBiliCardModel({ config: {} })
+  const descs = result.ok ? result.fields.map((field) => field.desc) : []
+  const expected = [
+    '看 B 站视频时给你几张画面。多几张能看清结构，但每张都占上下文，一般 6 张够。',
+    'B 站没给字幕时，短于这个时长才自动本地转写，免得让你干等；更长的会先问你一句。',
+    '抽帧和下载的清晰度。1080P 不一定每条视频都有。',
+  ]
+  const settingsDescs = BILI_FIELDS.map((field) => field.desc)
+  report('13(加)fields 逐字透传三句 desc,且与 bili-settings.js 的 BILI_FIELDS 一字不差(防漂移)',
+    JSON.stringify(descs) === JSON.stringify(expected) && JSON.stringify(settingsDescs) === JSON.stringify(expected),
+    JSON.stringify(descs) + '|' + JSON.stringify(settingsDescs))
 }
 
 console.log(`\n共 ${totalCount} 项,失败 ${failedCount} 项`)

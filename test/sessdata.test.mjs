@@ -21,21 +21,21 @@ function report(name, passed, detail) {
 
 // ── parseSessdataExpiry ──
 {
-  const result = parseSessdataExpiry('b7552ac9%2C1808099906%2C70201%2Aabc')
-  report("1 真实样本(带 %2C/%2A 编码)→ expiresAtMs === 1808099906000",
-    result.ok === true && result.expiresAtMs === 1808099906000,
+  const result = parseSessdataExpiry('0123abcd%2C1800000000%2C70201%2Aabc')
+  report("1 真实样本(带 %2C/%2A 编码)→ expiresAtMs === 1800000000000",
+    result.ok === true && result.expiresAtMs === 1800000000000,
     JSON.stringify(result))
 }
 {
-  const result = parseSessdataExpiry('b7552ac9,1808099906,70201')
+  const result = parseSessdataExpiry('0123abcd,1800000000,70201')
   report('2 已解码的裸逗号形式 → 同样结果(两种编码都认)',
-    result.ok === true && result.expiresAtMs === 1808099906000,
+    result.ok === true && result.expiresAtMs === 1800000000000,
     JSON.stringify(result))
 }
 {
-  const result = parseSessdataExpiry('abc,1808099906')
+  const result = parseSessdataExpiry('abc,1800000000')
   report('3 只有两段 → 第 2 段就是过期时间,仍能解析',
-    result.ok === true && result.expiresAtMs === 1808099906000,
+    result.ok === true && result.expiresAtMs === 1800000000000,
     JSON.stringify(result))
 }
 {
@@ -51,8 +51,8 @@ function report(name, passed, detail) {
     JSON.stringify(result))
 }
 {
-  const result = parseSessdataExpiry('abc,1808099906000')
-  report('6 第 2 段是毫秒(1808099906000)→ 落在 2100 年之外,ok:false,reason 含「不合理」',
+  const result = parseSessdataExpiry('abc,1800000000000')
+  report('6 第 2 段是毫秒(1800000000000)→ 落在 2100 年之外,ok:false,reason 含「不合理」',
     result.ok === false && result.reason.includes('不合理'),
     JSON.stringify(result))
 }
@@ -64,9 +64,9 @@ function report(name, passed, detail) {
     shapes.map((shape) => parseSessdataExpiry(shape).ok).join(','))
 }
 {
-  const result = parseSessdataExpiry('abc%ZZ,1808099906')
+  const result = parseSessdataExpiry('abc%ZZ,1800000000')
   report("8 坏编码 'abc%ZZ,…'(decodeURIComponent 会抛)→ 不抛异常,按原串解析成功",
-    result.ok === true && result.expiresAtMs === 1808099906000,
+    result.ok === true && result.expiresAtMs === 1800000000000,
     JSON.stringify(result))
 }
 
@@ -87,7 +87,7 @@ function report(name, passed, detail) {
 {
   const cookies = {
     buvid3: 'XY7890abc123456def',
-    SESSDATA: 'b7552ac9,1808099906,70201xxxx',
+    SESSDATA: '0123abcd,1800000000,70201xxxx',
     DedeUserID__ckMd5: 'abcdef0123456789',
     bili_jct: 'jj1234567890',
     DedeUserID: '123456789',
@@ -95,7 +95,7 @@ function report(name, passed, detail) {
   const result = redactCredential(cookies)
   report('11 五个字段齐全(故意乱序传入)→ 按固定顺序输出、分隔是「; 」',
     result.ok === true &&
-      result.text === 'SESSDATA=b755***xxxx; bili_jct=jj12***7890; DedeUserID=1234***6789; DedeUserID__ckMd5=abcd***6789; buvid3=XY78***6def',
+      result.text === 'SESSDATA=0123***xxxx; bili_jct=jj12***7890; DedeUserID=1234***6789; DedeUserID__ckMd5=abcd***6789; buvid3=XY78***6def',
     JSON.stringify(result))
 }
 {

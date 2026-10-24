@@ -1329,7 +1329,7 @@ export function apply(ctx, rowConfig = {}) {
     if (!stored.ok) return `B 站登录态：未配置（${stored.why}）`
     const check = stored.validation
     if (!check.usable) return `B 站登录态：不可用（${check.reason}）`
-    const left = check.daysLeft === null ? '过期时间未知' : `还剩 ${check.daysLeft.toFixed(1)} 天`
+    const left = check.daysLeft === null ? '过期时间未知' : `还剩 ${Math.round(check.daysLeft)} 天`
     const warn = check.daysLeft !== null && check.daysLeft <= 7 ? '｜⚠️ 快过期了，请重新登录' : ''
     return `B 站登录态：可用，${left}${warn}`
   }

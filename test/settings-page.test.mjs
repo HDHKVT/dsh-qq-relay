@@ -281,7 +281,8 @@ console.log('failure surfaced -> OK')
   assert.ok(freqField, '要有「主动发表情包的频率」设置项')
   const oftenChoice = [...walk(tree)].find((node) => (node.children ?? []).includes('常发'))
   assert.ok(oftenChoice, '频率要有「常发」这一档')
-  const stickerCard = [...walk(tree)].find((node) => (node.children ?? []).includes('表情包'))
+  // 卡片标题现在在 CollapsibleCard 的 props 里（折叠壳），不在 children 里
+  const stickerCard = [...walk(tree)].find((node) => node.props && node.props.title === '表情包');
   assert.ok(stickerCard, '表情包要独立成一张卡（和图片并列）')
   console.log('ack settings -> OK')
 }
