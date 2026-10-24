@@ -40,6 +40,12 @@ import { ackKind, shouldAck, renderAck } from './lib/ack.js'
 import { addSticker, stickerDirOf, pickStickerSource, listStickers, stickerPath, renameSticker, removeSticker } from './lib/stickers.js'
 import { runVideoProcessor, checkVideoSize, ensureAsciiInput } from './lib/video.js'
 import { downloadBili, findBiliLink } from './lib/bilibili.js'
+import { peekBili, prunePeekDirs } from './lib/bili-peek.js'
+import { grabBiliFrames } from './lib/bili-frame.js'
+import { readCredential, writeCredential, migrateFromConfig, credentialPathOf, cookieHeaderOf, clearCredential } from './lib/credential-store.js'
+import { startQrLogin, pollQrLogin, saveLoginCredential } from './lib/bili-login-service.js'
+import { describeLoginState } from './lib/login-flow.js'
+import { buildBiliCardModel } from './lib/bili-card-model.js'
 
 export const name = 'dsh-qq-relay'
 export const inject = []
@@ -221,6 +227,29 @@ function writeReceipt(outboxDir, inboxId, text) {
 
 // ---------- 工具版要用的几件小事（锁定会话 / 看状态 / 切引擎模式）----------
 
+/**
+ * 当前该用哪个 B 站 cookie：
+ *   独立凭证文件优先（搬过去之后的主路径），没有才退回 relay.json 里的旧字段。
+ */
+function currentBiliCookie(cfg) {
+  const stored = readCredential(BASE)
+  if (stored.ok) {
+    const header = cookieHeaderOf(stored.record)
+    if (header !== '') return header
+  }
+  return cfg.video.biliCookie || ''
+}
+
+/** 秒 → mm:ss（不足 1 小时）/ h:mm:ss；bili_frame 的输出用 */
+function formatStampOf(seconds) {
+  const total = Math.round(Number(seconds) || 0)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  const two = (value) => String(value).padStart(2, '0')
+  return hours > 0 ? `${hours}:${two(minutes)}:${two(secs)}` : `${two(minutes)}:${two(secs)}`
+}
+
 /** 工具的输出契约（照 dsh-ops 的形状：`{content:[…], structuredContent?}`） */
 const TOOL_OUTPUT = {
   schema: {
@@ -383,7 +412,13 @@ const REMOTE_NAMESPACE = 'qqRelay'
 /** 抄自 `@deepseek-ai/dsh-typert-protocol` 的标记键（`REMOTE_METHOD_DESCRIPTOR`）。 */
 const REMOTE_METHOD_DESCRIPTOR_KEY = '@deepseek-ai/dsh-typert-protocol/remote-methods'
 /** SRC 模式从**源码**里解析参数名：只留唯一的裸标识符（见 methodParameterNames）。 */
-const REMOTE_METHOD_NAMES = ['status', 'act', 'config', 'configUpdate', 'imageClear', 'openImageDir', 'logTail', 'logClear', 'faces', 'facesImport', 'facesReset', 'fileClear', 'openFileDir', 'videoClear', 'openVideoDir', 'biliClear', 'openBiliDir']
+/** 待确认的扫码登录（一次只跟一个码）。生成后放这里，check 时用。 */
+let pendingQr = null
+/** 扫码登录当前相位（给设置卡用；工具和界面共用一份） */
+let loginPhase = 'idle'
+let loginReason = ''
+
+const REMOTE_METHOD_NAMES = ['status', 'act', 'config', 'configUpdate', 'biliCard', 'biliLoginStart', 'biliLoginPoll', 'biliLogout', 'imageClear', 'openImageDir', 'logTail', 'logClear', 'faces', 'facesImport', 'facesReset', 'fileClear', 'openFileDir', 'videoClear', 'openVideoDir', 'biliClear', 'openBiliDir']
 /** 状态快照的短缓存：心跳每 30 秒刷新一次声明，卡片 10 秒轮询 ⇒ 30 秒够用。 */
 const REMOTE_STATUS_TTL_MS = 30_000
 
@@ -417,6 +452,26 @@ function createRemoteService(runtime) {
   /** 设置页读到的快照：**密钥只回“有没有”**（见 lib/config.js 的 publicConfig）。 */
   QqRelayRemote.prototype.config = function config() {
     return runtime.config()
+  }
+
+  /** B 站设置卡的数据模型（登录态 + 三个字段 + 按钮可用性）。 */
+  QqRelayRemote.prototype.biliCard = function biliCard() {
+    return runtime.biliCard()
+  }
+
+  /** 生成扫码登录的二维码，回 data URL 给浏览器直接显示。 */
+  QqRelayRemote.prototype.biliLoginStart = function biliLoginStart() {
+    return runtime.biliLoginStart()
+  }
+
+  /** 查一次扫码状态；确认了就存凭证。 */
+  QqRelayRemote.prototype.biliLoginPoll = function biliLoginPoll() {
+    return runtime.biliLoginPoll()
+  }
+
+  /** 退出登录：删掉凭证文件。 */
+  QqRelayRemote.prototype.biliLogout = function biliLogout() {
+    return runtime.biliLogout()
   }
 
   /** 设置页保存：返回 `{ saved, why? }`；校验失败不抛异常，让界面把原因原样显示。 */
@@ -516,6 +571,13 @@ function createRemoteService(runtime) {
 export function apply(ctx, rowConfig = {}) {
   rotateLogIfBig()
   loadCustomFaces()
+  // 登录凭证从 relay.json 搬进独立文件（只搬一次；已有文件就不动）
+  try {
+    const migrated = migrateFromConfig(BASE, readConfig(BASE))
+    if (migrated.migrated) log(`[cred] ${migrated.why} → ${migrated.path}`)
+  } catch (error) {
+    log(`[cred] 凭证搬迁失败（不影响启动）：${String((error && error.message) || error)}`)
+  }
   const at = new Date().toISOString()
   const report = {
     step: 'probe+mailbox', codeVersion: CODE_VERSION, at,
@@ -590,6 +652,67 @@ export function apply(ctx, rowConfig = {}) {
         // 下一轮读状态要看到新值（状态快照有 30 秒缓存）
         try { if (remoteService && typeof remoteService.invalidate === 'function') remoteService.invalidate() } catch { /* 忽略 */ }
         return { saved: true }
+      },
+      biliLogout: () => {
+        const got = clearCredential(BASE)
+        pendingQr = null
+        loginPhase = 'idle'
+        loginReason = ''
+        if (!got.ok) return { ok: false, why: got.why }
+        log(`[login] 凭证已清除${got.removed ? '' : '（本来就没有）'}`)
+        return { ok: true, removed: Boolean(got.removed) }
+      },
+      biliCard: () => {
+        const stored = readCredential(BASE)
+        return buildBiliCardModel({
+          validation: stored.ok ? stored.validation : null,
+          config: readConfig(BASE).video,
+          login: { phase: loginPhase, reason: loginReason },
+        })
+      },
+      biliLoginStart: async () => {
+        try {
+          const cfg = readConfig(BASE)
+          const pythonPath = cfg.video.python || join(PLUGIN_DIR, 'video', '.venv', 'Scripts', 'python.exe')
+          const qrScript = join(PLUGIN_DIR, 'video', 'qr_render.py')
+          const dir = join(BASE, 'qr')
+          const got = await startQrLogin({ dir, pythonPath, qrScript })
+          if (!got.ok) { loginPhase = 'error'; loginReason = got.why; return { ok: false, why: got.why } }
+          pendingQr = { key: got.qrKey, startedAtMs: Date.now() }
+          loginPhase = 'waiting'; loginReason = ''
+          const base64 = readFileSync(got.pngPath).toString('base64')
+          log('[login] 界面生成了二维码')
+          return { ok: true, dataUrl: `data:image/png;base64,${base64}`, key: got.qrKey, qrUrl: got.qrUrl }
+        } catch (error) {
+          const message = String((error && error.message) || error)
+          loginPhase = 'error'; loginReason = message
+          return { ok: false, why: message }
+        }
+      },
+      biliLoginPoll: async () => {
+        if (!pendingQr || !pendingQr.key) return { ok: false, state: 'idle', text: '还没有生成二维码' }
+        const verdict = await pollQrLogin({ qrKey: pendingQr.key })
+        if (!verdict.ok) {
+          loginPhase = 'error'; loginReason = verdict.reason || ''
+          return { ok: false, state: 'error', text: `轮询失败：${verdict.reason || '未知原因'}` }
+        }
+        if (verdict.state === 'confirmed') {
+          const saved = saveLoginCredential({ baseDir: BASE, pollResult: verdict })
+          loginPhase = 'success'; loginReason = ''
+          pendingQr = null
+          if (!saved.ok) {
+            loginPhase = 'error'; loginReason = saved.why
+            return { ok: false, state: 'error', text: `登录成功但保存失败：${saved.why}` }
+          }
+          log('[login] 界面扫码登录成功，凭证已更新')
+          return { ok: true, state: 'confirmed', text: '登录成功，凭证已保存' }
+        }
+        if (verdict.state === 'pending') { loginPhase = 'waiting' }
+        else if (verdict.state === 'scanned') { loginPhase = 'scanned' }
+        else if (verdict.state === 'expired') { loginPhase = 'expired'; loginReason = ''; pendingQr = null }
+        else { loginPhase = 'error'; loginReason = verdict.reason || ''; pendingQr = null }
+        const view = describeLoginState({ state: verdict.state, reason: verdict.reason })
+        return { ok: true, state: verdict.state, text: view.ok ? view.text : String(verdict.state) }
       },
       imageClear: () => {
         const cfg = readConfig(BASE)
@@ -1190,10 +1313,25 @@ export function apply(ctx, rowConfig = {}) {
 
   /** 一行状态（工具 `relay_status` 用；也顺手写进日志）。 */
   function statusText() {
-    return stateText(readRelayState(report.relay.resolved, {
+    const base = stateText(readRelayState(report.relay.resolved, {
       processed: report.relay.processed.length,
       errors: report.relay.errors.length,
     }))
+    return base + '\n' + credentialLine()
+  }
+
+  /**
+   * B 站登录态那一行：能不能用、还剩多少天。
+   * 用户应该一眼看到"快过期了"，而不是等某天字幕突然取不到。
+   */
+  function credentialLine() {
+    const stored = readCredential(BASE)
+    if (!stored.ok) return `B 站登录态：未配置（${stored.why}）`
+    const check = stored.validation
+    if (!check.usable) return `B 站登录态：不可用（${check.reason}）`
+    const left = check.daysLeft === null ? '过期时间未知' : `还剩 ${check.daysLeft.toFixed(1)} 天`
+    const warn = check.daysLeft !== null && check.daysLeft <= 7 ? '｜⚠️ 快过期了，请重新登录' : ''
+    return `B 站登录态：可用，${left}${warn}`
   }
 
   // ---- 三个动作的**唯一实现**：工具与浏览器按钮都调这里（语义不会分叉）----
@@ -1477,7 +1615,7 @@ export function apply(ctx, rowConfig = {}) {
               : 'auto'
             const got = await downloadBili(text, dir, {
               maxMb: cfg.video.maxMb,
-              cookie: cfg.video.biliCookie || '',
+              cookie: currentBiliCookie(cfg),
               audioOnly,
               log,
             })
@@ -1491,7 +1629,7 @@ export function apply(ctx, rowConfig = {}) {
             log(`[bili] 已下载 ${got.path}（${mb}MB，${got.mediaType}）`)
             const kind = got.mediaType === 'audio' ? '音频' : '视频'
             const notice = got.notice ? String.fromCharCode(10) + got.notice : ''
-            return reply(`下载好了（${kind}）：《${got.title}》（${Math.round(got.duration)} 秒，${mb}MB）${notice}\n路径：${got.path}\n\n要看内容就接着调 analyze_video。`)
+            return reply(`下载好了（${kind}）：《${got.title}》（${Math.round(got.duration)} 秒，${mb}MB）${notice}\n路径：${got.path}\n\n要文字稿就接着调 analyze_video（它只转写、不出图）。`)
           } catch (error) {
             const message = String((error && error.message) || error)
             log(`[bili] 异常：${message}`)
@@ -1500,8 +1638,185 @@ export function apply(ctx, rowConfig = {}) {
         },
       },
       {
+        name: 'bili_login_start',
+        description: '生成一张 B 站扫码登录的二维码（两分钟内有效），返回 PNG 路径。把图发给主人扫，扫完再用 bili_login_check 确认。登录成功后会覆盖现有凭证。',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        output: TOOL_OUTPUT,
+        execute: async () => {
+          const reply = (text) => ({ content: [{ type: 'text', text }] })
+          try {
+            const cfg = readConfig(BASE)
+            const pythonPath = cfg.video.python || join(PLUGIN_DIR, 'video', '.venv', 'Scripts', 'python.exe')
+            const qrScript = join(PLUGIN_DIR, 'video', 'qr_render.py')
+            const dir = join(BASE, 'qr')
+            const got = await startQrLogin({ dir, pythonPath, qrScript })
+            if (!got.ok) {
+              log(`[login] 生成二维码失败：${got.why}`)
+              return reply(`生成二维码失败：${got.why}`)
+            }
+            pendingQr = { key: got.qrKey, startedAtMs: Date.now() }
+            log(`[login] 二维码已生成 key=${got.qrKey.slice(0, 8)}…`)
+            return reply([
+              '二维码已生成（约两分钟有效），图片在这里：',
+              got.pngPath,
+              '',
+              '把这张图发给主人扫；扫完调 bili_login_check 确认。',
+            ].join('\n'))
+          } catch (error) {
+            const message = String((error && error.message) || error)
+            log(`[login] 异常：${message}`)
+            return reply(`生成二维码异常：${message}`)
+          }
+        },
+      },
+      {
+        name: 'bili_login_check',
+        description: '查一次扫码登录的结果。返回 pending（还没扫）/ scanned（扫了待确认）/ confirmed（成功，已写入凭证）/ expired（码过期，要重新生成）。不循环、不重试。',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        output: TOOL_OUTPUT,
+        execute: async () => {
+          const reply = (text) => ({ content: [{ type: 'text', text }] })
+          try {
+            if (!pendingQr || !pendingQr.key) return reply('还没有生成二维码，先调 bili_login_start')
+            const verdict = await pollQrLogin({ qrKey: pendingQr.key })
+            if (!verdict.ok) {
+              log(`[login] 轮询失败：${verdict.reason}`)
+              return reply(`轮询失败：${verdict.reason}`)
+            }
+            const view = describeLoginState({ state: verdict.state, reason: verdict.reason })
+            let line = view.ok ? view.text : `状态：${verdict.state}`
+            if (verdict.state === 'confirmed') {
+              const saved = saveLoginCredential({ baseDir: BASE, pollResult: verdict })
+              if (saved.ok) {
+                pendingQr = null
+                const stored = readCredential(BASE)
+                const left = stored.ok && stored.validation.daysLeft !== null
+                  ? `，还剩 ${stored.validation.daysLeft.toFixed(1)} 天`
+                  : ''
+                line += `\n凭证已保存（${saved.path}）${left}`
+                log('[login] 凭证已更新')
+              } else {
+                line += `\n⚠️ 登录成功但保存失败：${saved.why}`
+                log(`[login] 保存失败：${saved.why}`)
+              }
+            } else if (verdict.state === 'expired' || verdict.state === 'error') {
+              pendingQr = null
+            }
+            return reply(line)
+          } catch (error) {
+            const message = String((error && error.message) || error)
+            log(`[login] 异常：${message}`)
+            return reply(`查登录状态异常：${message}`)
+          }
+        },
+      },
+      {
+        name: 'bili_peek',
+        description: 'B 站视频「轻量看」：从故事板缩略图里抽几帧 + 拿稿件信息，输出一段文字和一张总览图路径（图要自己用 read_image 看）。不下载视频、不做转写，几秒出结果，适合判断「这条值不值得点开」。要知道具体讲了什么，接着用 analyze_video。',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'B 站链接、BV 号，或带链接的整段分享文案' },
+            count: { type: 'integer', description: '抽几帧（默认 6，最多 9）' },
+          },
+          required: ['url'],
+          additionalProperties: false,
+        },
+        output: TOOL_OUTPUT,
+        execute: async (args) => {
+          const reply = (text) => ({ content: [{ type: 'text', text }] })
+          try {
+            const cfg = readConfig(BASE)
+            const text = String((args && args.url) || '').trim()
+            if (text === '') return reply('没给链接')
+            const wanted = Number(args && args.count)
+            const preset = Number(cfg.video.peekCount)
+            const fallback = Number.isFinite(preset) ? preset : 6
+            const count = Number.isFinite(wanted) ? Math.max(1, Math.min(9, Math.floor(wanted))) : fallback
+            const workRoot = join(BASE, 'peek')
+            mkdirSync(workRoot, { recursive: true })
+            const pythonPath = cfg.video.python || join(PLUGIN_DIR, 'video', '.venv', 'Scripts', 'python.exe')
+            const scriptPath = join(PLUGIN_DIR, 'video', 'storyboard_crop.py')
+            const got = await peekBili({ text, workRoot, pythonPath, scriptPath, count, cookie: currentBiliCookie(cfg), asrModelDir: cfg.video.modelDir || '', asrMode: cfg.video.mode || 'accurate', asrAutoLimitSeconds: (Number(cfg.video.asrAutoLimitMin) || 10) * 60, log })
+            if (!got.ok) {
+              log(`[peek] 失败：${got.why}`)
+              return reply(`轻量看失败：${got.why}`)
+            }
+            const pruned = prunePeekDirs(workRoot, 3)
+            if (pruned > 0) log(`[peek] 顺手清掉 ${pruned} 个过期目录`)
+            log(`[tool] bili_peek ${got.frames.length} 帧 -> ${got.dir}`)
+            return reply(got.text)
+          } catch (error) {
+            const message = String((error && error.message) || error)
+            log(`[peek] 异常：${message}`)
+            return reply(`轻量看异常：${message}`)
+          }
+        },
+      },
+      {
+        name: 'bili_frame',
+        description: '按时刻从 B 站视频里精确抽帧（远程 seek，不下整片，一帧约 2~3 秒，720P）。给 BV 号 + 时刻（"22:13" 或秒数），返回图片路径和该时刻的字幕原文。视频常带画内字幕，可用来校对 AI 字幕的错字——注意 AI 字幕和画内字幕有 3~5 秒时差，校对时给 window=3 取前后窗口。',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'B 站链接或 BV 号' },
+            times: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '要抽的时刻，如 ["22:13","1350"]；支持 mm:ss 或 h:mm:ss 或纯秒数',
+            },
+            window: { type: 'integer', description: '每个时刻前后各扩几秒（校对字幕用，默认 0；建议 3）' },
+            max_frames: { type: 'integer', description: '最多抽几帧（默认 6，最多 12）' },
+          },
+          required: ['url', 'times'],
+          additionalProperties: false,
+        },
+        output: TOOL_OUTPUT,
+        execute: async (args) => {
+          const reply = (text) => ({ content: [{ type: 'text', text }] })
+          try {
+            const cfg = readConfig(BASE)
+            const text = String((args && args.url) || '').trim()
+            if (text === '') return reply('没给链接')
+            const times = Array.isArray(args && args.times) ? args.times : []
+            if (times.length === 0) return reply('没给时刻')
+            const wantedWindow = Number(args && args.window)
+            const windowSeconds = Number.isFinite(wantedWindow) ? Math.max(0, Math.min(10, Math.floor(wantedWindow))) : 0
+            const wantedMax = Number(args && args.max_frames)
+            const maxFrames = Number.isFinite(wantedMax) ? Math.max(1, Math.min(12, Math.floor(wantedMax))) : 6
+            const workRoot = join(BASE, 'frames')
+            mkdirSync(workRoot, { recursive: true })
+            const pythonPath = cfg.video.python || join(PLUGIN_DIR, 'video', '.venv', 'Scripts', 'python.exe')
+            const scriptPath = join(PLUGIN_DIR, 'video', 'remote_frame.py')
+            const got = await grabBiliFrames({
+              text, times, workRoot, pythonPath, scriptPath,
+              cookie: currentBiliCookie(cfg), window: windowSeconds, maxFrames, qn: Number(cfg.video.qn) || 64, log,
+            })
+            if (!got.ok) {
+              log(`[frame] 失败：${got.why}`)
+              return reply(`抽帧失败：${got.why}`)
+            }
+            const lines = [`《${got.title}》`]
+            for (const frame of got.frames) {
+              const stamp = formatStampOf(frame.timeSeconds)
+              lines.push('')
+              lines.push(`[${stamp}] ${frame.path}`)
+              if (frame.subtitle) lines.push(`  该时刻字幕：${frame.subtitle}`)
+            }
+            if (got.errors.length > 0) lines.push('', `【失败】${got.errors.map((e) => `${e.timeSeconds}s ${e.reason}`).join('；')}`)
+            lines.push('', '图片用 read_image 看。')
+            log(`[tool] bili_frame ${got.frames.length} 帧 -> ${got.dir}`)
+            return reply(lines.join('\n'))
+          } catch (error) {
+            const message = String((error && error.message) || error)
+            log(`[frame] 异常：${message}`)
+            return reply(`抽帧异常：${message}`)
+          }
+        },
+      },
+      {
         name: 'analyze_video',
-        description: '用本地 Python 处理器分析一段视频：抽音频做 ASR 出字幕、抽帧拼图，返回带时间点的字幕与拼图路径（拼图要自己用 read_image 看）。字幕多时可以分页：再调一次并给 from。',
+        description: '把本地音视频文件转成文字（本地 Whisper，不联网）。只做转写、不出图——要看画面用 bili_frame。字幕多时可以分页：再调一次并给 from。',
         parameters: {
           type: 'object',
           properties: {

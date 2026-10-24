@@ -165,7 +165,10 @@ assert.match(textOf(tree), /QQ 中继/)
 const appIdShown = [...walk(tree)].find((node) => node.props && node.props.value === 'app-1')
 assert.ok(appIdShown, 'AppID 要从快照里显示出来')
 assert.match(textOf(tree), /凭据已配置/, '有密钥时要显示“已配置”，而不是明文')
-assert.match(textOf(tree), /session-cur/, '锁定会话要显示出来')
+// 链路 / 界面两张卡已经按需求删掉；登录卡标题改成说清楚是登录机器人
+assert.match(textOf(tree), /QQ 机器人登录/, '登录卡标题要写明是 QQ 机器人登录');
+assert.doesNotMatch(textOf(tree), /消息从哪来/, '链路设置应该已经去掉');
+assert.doesNotMatch(textOf(tree), /会话卡片/, '界面设置应该已经去掉');
 assert.match(textOf(tree), /要点一次下面的「保存」才生效/, '登录区要说明“填完要点保存”')
 console.log('rendered ->', textOf(tree).replace(/\s+/g, ' ').trim().slice(0, 160))
 

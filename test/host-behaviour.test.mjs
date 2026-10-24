@@ -66,7 +66,7 @@ for (const dir of [MEDIA, join(APP_DIR, 'data'), INBOX, join(MAILBOX, 'outbox'),
 }
 writeFileSync(
   join(MEDIA, 'relay.json'),
-  JSON.stringify({ sessionId: LOCK_SESSION, mailbox: MAILBOX, hint: false }, null, 2),
+  JSON.stringify({ sessionId: LOCK_SESSION, transport: 'mailbox', mailbox: MAILBOX, hint: false }, null, 2),
   'utf8',
 );
 writeFileSync(join(APP_DIR, 'data', 'settings.json'), JSON.stringify({ qqMode: 'answer', other: 1 }, null, 2), 'utf8');
@@ -167,7 +167,7 @@ assert.equal(remoteInstance.typertRemote.serviceKey, 'qqRelayRemote');
 assert.equal(remoteInstance.typertRemote.service, remoteInstance, 'binding identity must hold');
 assert.deepEqual(
   protocol.remoteMethods(remoteInstance).map((m) => m.method),
-  ['status', 'act', 'config', 'configUpdate', 'imageClear', 'openImageDir', 'logTail', 'logClear', 'faces', 'facesImport', 'facesReset', 'fileClear', 'openFileDir', 'videoClear', 'openVideoDir', 'biliClear', 'openBiliDir'],
+  ['status', 'act', 'config', 'configUpdate', 'biliCard', 'biliLoginStart', 'biliLoginPoll', 'biliLogout', 'imageClear', 'openImageDir', 'logTail', 'logClear', 'faces', 'facesImport', 'facesReset', 'fileClear', 'openFileDir', 'videoClear', 'openVideoDir', 'biliClear', 'openBiliDir'],
   'the marker must declare status + act + the settings pair',
 );
 console.log('A1 remote service registered:', JSON.stringify(remoteInstance.typertRemote.namespace));
@@ -175,8 +175,8 @@ console.log('A1 remote service registered:', JSON.stringify(remoteInstance.typer
 // ---- 2. the tools still register, with the same names --------------
 assert.deepEqual(
   [...tools.keys()].sort(),
-  ['analyze_video', 'download_bili', 'qq_send_file', 'qq_send_image', 'relay_engine', 'relay_lock', 'relay_status', 'relay_unlock', 'sticker_list', 'sticker_name', 'sticker_send'],
-  'tool names must not change (qq_send_* / sticker_* / analyze_video added 2026-10-18~20)',
+  ['analyze_video', 'bili_frame', 'bili_login_check', 'bili_login_start', 'bili_peek', 'download_bili', 'qq_send_file', 'qq_send_image', 'relay_engine', 'relay_lock', 'relay_status', 'relay_unlock', 'sticker_list', 'sticker_name', 'sticker_send'],
+  'tool names must not change (qq_send_* / sticker_* / analyze_video added 2026-10-18~20; bili_peek added 2026-10-24)',
 );
 const toolNames = [...tools.keys()].sort().join(',');
 console.log('A2 tools registered:', toolNames);

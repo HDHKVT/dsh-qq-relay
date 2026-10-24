@@ -42,7 +42,7 @@ for (const dir of [MEDIA, join(APP_DIR, 'data'), INBOX, OUTBOX, DONE, FAILED, MA
 }
 writeFileSync(
   join(MEDIA, 'relay.json'),
-  JSON.stringify({ sessionId: LOCK_SESSION, mailbox: MAILBOX, hint: true }, null, 2),
+  JSON.stringify({ sessionId: LOCK_SESSION, transport: 'mailbox', mailbox: MAILBOX, hint: true }, null, 2),
   'utf8',
 );
 writeFileSync(join(APP_DIR, 'data', 'settings.json'), JSON.stringify({ qqMode: 'relay' }, null, 2), 'utf8');

@@ -6,6 +6,8 @@
 
 支持从 QQ 发图片、文件、动图、表情包、视频、B 站链接到指定的 DSH 会话窗口。
 
+B 站链接能直接看懂：AI 字幕、官方摘要、画面缩略图一起给你；没字幕的还能现场抽帧、或者本地转写。
+
 ## 安装
 
 跟你的 DSH 说：
@@ -16,7 +18,7 @@
 ## 首次使用
 
 1. 搜索引擎搜 QQ 开放平台 → 注册一个官方的 QQ 机器人 → 进后台获取 AppId / AppSecret。
-2. 回到 DSH 设置页 → 「QQ 中继」→ 填 AppId / AppSecret → 保存；
+2. 回到 DSH 设置页 → 「QQ 中继」→ 「登录」卡里填 AppId / AppSecret → 保存；
 3. 找一个会话，点锁定按钮：
 
    ![锁定会话说明](./assets/smtp2.png)
@@ -34,14 +36,16 @@
      - 图片库（incoming 临时库 / stickers 表情包库）
      - 表情包（暗号收录的三种方式、自动命名、发送频率）
      - 文件（双向收发、大小上限）
-     - 视频理解（Python 3.12 + venv + Whisper 模型）
-     - 设置页 - 视频模式（fast / accurate、抽帧、分页）
+   - 1.3 看 B 站视频（在线看，不下整片）
+   - 1.4 B 站登录（扫一次码）
+   - 1.5 本地音视频转写（Python 3.12 + venv + Whisper 模型）
+     - 设置页 - 转写模式（fast / accurate、模型大小）
      - 功能降级表（缺什么会怎样）
 2. **架构**
    - 宿主各模块职责（qq-direct / delivery / qq-reply / ...）
    - 浏览器侧 `lib/client.js` 的「QQ 中继」设置页
 3. **隐私与安全**
-   - 数据只在本机；日志只打 CDN 主机名；biliCookie 不回浏览器
+   - 数据只在本机；日志只打 CDN 主机名；登录凭证不回浏览器
 4. **已知限制**
    - 只支持私聊、ASR 会脑补、1080P 受限、无 GPU、旧信箱冻结
 5. **给 AI 看的插件修改指南**
@@ -136,11 +140,46 @@ DSH 默认看动态图只看一帧。为了让它能看懂动态图，就需要�
 
 ---
 
-#### 视频理解
+#### 看 B 站视频
 
-如果你希望在 QQ 上发个视频链接，让你的大肥鱼能看懂视频，就需要额外下载一点东西。
+发一条 B 站链接过来，我不会把整条视频下下来——直接从 B 站那边拿三样东西：
 
-发送以下内容给你的大肥鱼：
+1. **AI 字幕**（B 站自己转的，带时间点）；
+2. **官方摘要 + 大纲**（B 站给这条视频生成的要点，每条都带时间点）；
+3. **画面缩略图**（B 站每 10 秒存的图，拼成一张总览，我一次看完）。
+
+几秒出结果，适合先判断「这条值不值得看」。要看具体某一秒的画面，我再单独去抽那一帧——还是不下整片，一帧约两三秒。
+
+有视频没字幕也照样能看：短于 10 分钟的，我自动把音频拉下来本地转写；更长的先问你一句，因为要等几分钟。
+
+设置页能调三个数：抽几帧、自动转写的时长门槛、画质。
+
+---
+
+#### B 站登录
+
+有些东西不登录拿不到（字幕、官方总结都要）。扫一次码就行：
+
+设置 - QQ 中继 - 登录 - B 站登录，点「重新扫码」，把码发给你的大肥鱼扫。
+
+登录态会显示还剩多少天（B 站给的凭证里自带过期时间，我读出来）；快过期时会提醒你。
+
+**不想给太多权限也别担心**：这个码由 B 站官方接口生成，确认是在 B 站 APP 里点的，插件全程碰不到你的密码；登录后我只存 `SESSDATA` 一个字段，用不上的一律不存。
+
+---
+
+#### 本地音视频转写
+
+你在 QQ 里**直接发**的音视频文件（不是链接），走的是另一条路：本地 Whisper 把声音转成文字。
+
+跟上面的区别：
+
+- 上面那条用的是 B 站自己的字幕，**不占你的机器**；
+- 这条是本地识别，**B 站没给字幕、或者文件本来就在你手上**时才用得上。
+
+本地**不抽帧**，只认声音；画面一律从 B 站线上取。
+
+要装的东西：
 
 Python 3.12
 
@@ -151,19 +190,20 @@ venv 和相关依赖
    ```
 
 **Whisper 模型**：
-   - 默认 `base`（约 **145MB**）：**首次跑视频时自动下载**，缓存在 `<数据目录>\hf-cache`；
-   - 想更准可换 `large-v3-turbo`（约 **1.6GB**）：手动下载到任意目录，在设置页「视频 → 模型目录」指过去。
+
+   - 默认 `base`（约 **145MB**）：**首次跑时自动下载**，缓存在 `<数据目录>\hf-cache`；
+   - 想更准可换 `large-v3-turbo`（约 **1.6GB**）：手动下载到任意目录，在设置页「视频 - 模型目录」指过去。
      文件：`config.json`、`model.bin`、`tokenizer.json`、`vocabulary.json`、`preprocessor_config.json`。
    - 国内网络已默认走 `HF_ENDPOINT=https://hf-mirror.com` 且关掉 xet（插件注入，不用手配）。
 
 ---
 
-#### 设置页 - 视频模式
+#### 设置页 - 转写模式
 
 - `fast`：base + VAD，约 **12 倍实时**，适合新闻/口播；
 - `accurate`：large-v3-turbo、不切音频，约 **2.4 倍实时**，适合长纪录片；
-- 抽帧：每 2 秒采样，HSV 直方图判换场景，长视频按时间轴均匀取帧；
-- 字幕分页（`from`/`limit`），结果按视频路径缓存，翻页不重跑。
+- 两个模式其实就是「模型大小」和「要不要先切掉静音」的组合，设置页下面那行小字有解释；
+- 字幕分页（`from`/`limit`），结果按文件路径缓存，翻页不重跑。
 
 ---
 
@@ -176,6 +216,9 @@ venv 和相关依赖
 | venv 里少依赖 | `analyze_video` 返回 Python 报错（stderr 原文会转给你） |
 | 没有 base 模型 | 首次分析会先下载（慢，但不报错）；网络不通则报下载失败 |
 | 没点锁定会话按钮 | 消息进不来（提示 `no-session`） |
+| 没登录 B 站 | 字幕、官方总结拿不到；画面缩略图还能看，也能抽帧 |
+| B 站那条视频没 AI 字幕 | 自动本地转写（10 分钟以内），更长的先问你 |
+| 凭证过期 | 同上，等于没登录；设置页会显示「已过期」并提示重新扫码 |
 
 ## 架构
 
@@ -185,7 +228,8 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
                     ├─ lib/delivery.js    主人门禁 → 去重 → 投进会话
                     ├─ lib/qq-reply.js    按 turn 关联回答，切好再发回
                     ├─ lib/vision.js · gif.js · files.js · stickers.js
-                    └─ video/video_processor.py   ASR + 抽帧 + 拼图（可选）
+                    ├─ lib/bili-*.js       B 站：看图 / 抽帧 / 字幕 / 总结 / 登录
+                    └─ video/video_processor.py   只做 ASR 转写（可选）
 ```
 
 浏览器侧 `lib/client.js` 提供「QQ 中继」设置页。
@@ -194,8 +238,10 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 
 - 所有数据只在本机：图片、文件、视频、字幕、日志都在插件数据目录；
 - 日志**只打 CDN 主机名**，不打印带签名的下载地址；
-- `biliCookie` 只存本地 `relay.json`，接口只回「有没有配」，值不下发浏览器；
-- 仓库里没有任何凭据；`relay.json`、媒体目录、虚拟环境都在 `.gitignore` 里。
+- B 站登录凭证存在独立的 `credential.json`：**只保存 `SESSDATA` 一个字段**（用不上的 `bili_jct` 等一律不存），
+  文件权限收到「只有当前用户可读」，且**不留备份**——备份等于把密钥多存一份；
+- 凭证值不下发浏览器，接口只回「能不能用、还剩几天」；
+- 仓库里没有任何凭据；`relay.json`、`credential.json`、媒体目录、虚拟环境都在 `.gitignore` 里。
 
 ## 已知限制
 
@@ -203,7 +249,9 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 - 视频 ASR 在纯音乐上会“脑补字幕”，已做三层过滤，宁可返回 0 条也不编；
 - B 站 1080P 需要登录且可能切 DASH（音视频分离），目前只做 720P 单文件与纯音频；
 - 没有 GPU 加速，ASR 走 CPU int8；
-- 旧的「引擎信箱」链路保留但冻结，仅为兼容旧配置。
+- 旧的「引擎信箱」链路保留但冻结，仅为兼容旧配置；新配置默认直连（`transport` 在界面上已经没有选项了）；
+- B 站画质只有 480P / 720P / 1080P 三档，1080P 不一定每条都有；
+- 本地不抽帧：要画面一律走 B 站线上（故事板或远程 seek），本地文件只能出文字。
 
 ## 给 AI 看的插件修改指南
 
@@ -219,6 +267,11 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 | 图片/GIF/图库 | `lib/vision.js`、`lib/gif.js` |
 | 文件收发 | `lib/files.js` |
 | 表情包仓库 | `lib/stickers.js` |
+| B 站看视频（编排） | `lib/bili-peek.js` |
+| B 站抽帧 | `lib/bili-frame.js` + `video/remote_frame.py` |
+| B 站字幕 / 总结 / 故事板 | `lib/bili-subtitle.js`、`lib/bili-conclusion.js`、`lib/bili-storyboard.js` |
+| B 站扫码登录 | `lib/bili-login-service.js` + `video/qr_render.py` |
+| 登录凭证存取 | `lib/credential-store.js`（只存 SESSDATA、收紧权限、不留备份） |
 | 视频理解（调用 Python） | `lib/video.js` + `video/video_processor.py` |
 | 配置默认值与校验 | `lib/config.js`（**改配置先改这里**） |
 | 设置页 UI | `lib/client.js`（品牌插件，无 JSX，用 `React.createElement`） |
@@ -230,7 +283,7 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 2. `parameters` 用 JSON Schema，`additionalProperties: false`；
 3. `execute` 返回 `{ content: [{ type: 'text', text }] }`；失败也要返回文字原因，**不要抛裸错**；
 4. 在 `test/host-behaviour.test.mjs` 的期望工具名数组里加上它，否则测试挂；
-5. 要让它出现在"设置页"或"卡片"里，再去 `lib/client.js` 加 UI，并在 `REMOTE_METHOD_NAMES` 注册对应 RPC。
+5. 要让它出现在设置页里，再去 `lib/client.js` 加 UI，并在 `REMOTE_METHOD_NAMES` 注册对应 RPC（两处都要改，漏一边就是「按钮点了没反应」）。
 
 ### 3. 加一个"设置项"
 
@@ -285,9 +338,11 @@ QQ 开放平台  ⇄  dsh-qq-relay（Node 宿主插件）
 
 ### 5. 视频管线（Python 侧）
 
-- 只有一个入口：`video_processor.py --input <媒体> --output <json> --mode fast|accurate --model auto --model-dir <目录> --max-grid <n>`；
+- 只有一个入口：`video_processor.py --input <媒体> --output <json> --mode fast|accurate --model auto --model-dir <目录>`；
+- **只做转写，不抽帧**（2026-10-24 去掉了本地抽帧：和 B 站线上重复，还占 113MB 的 opencv）；
 - 结果 JSON 的字段是**契约**：`status / duration_seconds / subtitles[{time,text}] / images[] / media / mode / model`；
-- 改 Python 时别破坏这个结构，否则 `lib/video.js` 的 `validateResult` 会拒收；
+  `images` 现在恒为空数组，但字段保留——`lib/video.js` 的 `validateResult` 按它校验，别删；
+- 改 Python 时别破坏这个结构，否则 `validateResult` 会拒收；
 - 依赖版本是钉死的（`av==13.1.0`、`huggingface_hub<1`），别随手升级，原因见 `video/requirements.txt` 的注释。
 
 ### 6. 改完怎么验
@@ -298,7 +353,8 @@ for %f in (test\*.test.mjs) do node %f   # 全量（cmd）
 ```
 
 - 纯逻辑改动：加/改单测，保持全绿；
-- 界面改动：`test/client-contract.test.mjs` 会渲染组件，改 UI 后要跑；
+- 界面改动：`test/settings-page.test.mjs` 会真的把设置页挂起来渲染，改 UI 后要跑；
+  会话里那张卡片已经删了（2026-10-25），只剩「锁定这条会话」按钮和设置页两块；
 - 宿主行为改动：`test/host-behaviour.test.mjs` 用一个假的 DSH 装载插件，验证工具名、RPC、信箱、回执；
 - 真机改动（QQ/视频）：必须实际发一条，别只看单测。
 
@@ -306,7 +362,7 @@ for %f in (test\*.test.mjs) do node %f   # 全量（cmd）
 
 - QQ 回复**纯文本、900 字以内、不带 Markdown**；
 - 调 `session/prompt` **必须**带 `AbortSignal`（漏了会静默不回）；
-- Windows 路径带中文时，OpenCV/ffmpeg 常打不开——`lib/video.js` 有硬链接兜底；
+- Windows 路径带中文时，长路径/中文偶发打不开——`lib/video.js` 有硬链接兜底；
 - 日志里**不要打印带签名的下载 URL**，只打主机名；
 - 配置写盘是"原子写 + 留 `.bak`"，别绕过 `writeConfig` 直接改 `relay.json`。
 

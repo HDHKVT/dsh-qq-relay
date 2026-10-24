@@ -25,3 +25,7 @@ faces.json
 # 系统杂项
 .DS_Store
 Thumbs.db
+# B 站登录凭证（只在本机，绝不进仓库）
+credential.json
+credential.json.bak
+qr/

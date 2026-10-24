@@ -28,7 +28,7 @@ const DSH_INSTALL =
   process.env.DSH_INSTALL ?? 'C:/Users/Administrator/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh';
 const PROFILE_DIR = process.env.DSH_PROFILE_DIR ?? 'C:/Users/Administrator/.dsh/profiles/web';
 const ROW_NAME = 'dsh-qq-relay';
-const CARD_MARKER = 'data-qq-relay-card';
+const CARD_MARKER = 'settings.section';
 
 const require = createRequire(`${DSH_INSTALL}/package.json`);
 const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href);
@@ -62,7 +62,6 @@ console.log('boot graph batches:', JSON.stringify(graph.batches));
 const entry = graph.entries.find((item) => item.id === ROW_NAME);
 assert.ok(entry, `${ROW_NAME} did not compose into the boot graph`);
 assert.deepEqual(entry.inject, [
-  '@deepseek-ai/dsh-client-ui-layout',
   '@deepseek-ai/dsh-client-ui-conversation',
   '@deepseek-ai/dsh-client-ui-settings',
 ]);
@@ -79,7 +78,7 @@ assert.equal(response.status, 200);
 assert.equal(response.headers.get('content-type'), 'text/javascript; charset=utf-8');
 assert.match(response.headers.get('cache-control') ?? '', /immutable/);
 const body = await response.text();
-assert.ok(body.includes(CARD_MARKER), 'served body does not carry the card marker');
+assert.ok(body.includes(CARD_MARKER), 'served body does not carry the settings marker');
 assert.ok(body.includes('window.__ModuleLoader__.load('), 'served body is not a lazy-CJS registration table');
 console.log(`GET ${entry.url} -> 200, ${body.length} bytes (UTF-16 units)`);
 
